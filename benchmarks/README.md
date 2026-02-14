@@ -1,3 +1,5 @@
+Benchmarks are not currently used at all.
+
 # Benchmarks
 
 Centralized benchmark suite for evaluating language models across experiments.

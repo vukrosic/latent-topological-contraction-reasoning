@@ -36,6 +36,13 @@ class LLMConfig:
     warmup_ratio: float = 0.0
     schedule_type: str = "constant"
 
+    # TCR Parameters (Experimental)
+    use_tcr: bool = False
+    tcr_alpha: float = 0.5  # Damping factor
+    tcr_epsilon: float = 1e-4  # Convergence threshold
+    tcr_max_steps: int = 10  # Maximum recursion steps
+    tcr_layers: int = 2  # Number of layers in the Universal Operator
+
     # Evaluation
     eval_every: Optional[int] = None
     eval_steps: int = 100

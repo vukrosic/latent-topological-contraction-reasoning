@@ -12,7 +12,10 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 from configs.llm_config import LLMConfig
 from configs.dataset_config import DataConfig
+from configs.dataset_config import DataConfig
 from training.trainer import train_minimal_llm
+from models.llm import MinimalLLM
+from models.tcr import TCRLLM
 from utils.helpers import set_seed, format_time
 from utils.logger import setup_logging
 
@@ -215,6 +218,12 @@ def main():
     parser.add_argument("--log_every", type=int, default=100, help="Logging frequency in steps")
     parser.add_argument("--warmup", type=str, default="true", help="Whether to perform untimed compilation warmup (true/false)")
 
+    # TCR Arguments
+    parser.add_argument("--use_tcr", action="store_true", help="Enable Topological Contraction Reasoning (TCR) mode")
+    parser.add_argument("--tcr_alpha", type=float, help="TCR Damping factor (alpha)")
+    parser.add_argument("--tcr_steps", type=int, help="TCR Max Recursion Steps")
+    parser.add_argument("--tcr_layers", type=int, help="TCR Number of Layers in Universal Operator")
+
     args = parser.parse_args()
 
     # Load Config
@@ -252,6 +261,16 @@ def main():
         config.gradient_accumulation_steps = args.gradient_accumulation_steps
     if args.log_every is not None:
         config.log_every = args.log_every
+    
+    # TCR Overrides
+    if args.use_tcr:
+        config.use_tcr = True
+    if args.tcr_alpha is not None:
+        config.tcr_alpha = args.tcr_alpha
+    if args.tcr_steps is not None:
+        config.tcr_max_steps = args.tcr_steps
+    if args.tcr_layers is not None:
+        config.tcr_layers = args.tcr_layers
     
     # Define custom milestones for validation curves and autosetup logging
     # For 8M benchmark (approx 488 steps)

@@ -12,7 +12,9 @@ from torch.amp import autocast
 from tqdm import tqdm
 from typing import List, Optional, Callable, Dict, Any
 from configs.llm_config import LLMConfig
+from configs.llm_config import LLMConfig
 from models.llm import MinimalLLM
+from models.tcr import TCRLLM
 from optimizers.muon import Muon
 from training.evaluation import evaluate_model
 from utils.helpers import set_seed, format_time
@@ -441,7 +443,11 @@ def train_minimal_llm(
     # 1. Initialize model with fixed seed
     # ============================================
     set_seed(42)
-    model = MinimalLLM(config)
+    if getattr(config, 'use_tcr', False):
+        print(f"🌀 Initializing TCR Model (steps={config.tcr_max_steps}, alpha={config.tcr_alpha})")
+        model = TCRLLM(config)
+    else:
+        model = MinimalLLM(config)
     model = model.to(device)
     
     # Load pretrained weights if specified
