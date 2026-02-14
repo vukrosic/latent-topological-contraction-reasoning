@@ -69,9 +69,13 @@ class TCRLLM(nn.Module):
         # or we could use equilibrium propagation (advanced). Here we use unrolled RNN style.
         
         alpha = self.config.tcr_alpha
+        epsilon = getattr(self.config, 'tcr_epsilon', 1e-4)
         
-        # Track convergence for monitoring (can be returned if needed)
+        # Track convergence
         diffs = []
+        
+        # Active mask: [Batch, SeqLen, 1] - 1.0 means active, 0.0 means converged
+        active_mask = torch.ones(z.shape[0], z.shape[1], 1, device=z.device, dtype=z.dtype)
 
         for step in range(self.config.tcr_max_steps):
             z_prev = z
@@ -81,17 +85,24 @@ class TCRLLM(nn.Module):
             for block in self.universal_operator:
                 z_proposal = block(z_proposal)
             
-            # Damped Update: z_{t+1} = alpha * z_t + (1 - alpha) * T(z_t)
-            # Note: The paper says z_{t+1} = alpha * z_t + (1 - alpha) * T(z_t)
-            # alpha is "memory" of previous state.
-            z = alpha * z_prev + (1 - alpha) * z_proposal
+            # Damped Update
+            z_next = alpha * z_prev + (1 - alpha) * z_proposal
             
-            # Calculate convergence residue (just for monitoring/inference breaking)
-            # We don't break early during training to keep batch shapes consistent unless using masking
-            # For simplicity in this experiment, we run fixed steps.
+            # Identify converged samples in the batch
             with torch.no_grad():
-                dist = torch.norm(z - z_prev, p=2, dim=-1).mean()
-                diffs.append(dist.item())
+                # dist shape: [Batch, SeqLen]
+                dist = torch.norm(z_next - z_prev, p=2, dim=-1)
+                
+                # Update active mask: if dist < epsilon, set to 0.0
+                # We use a threshold to stop updating.
+                currently_active = (dist > epsilon).unsqueeze(-1).to(z.dtype)
+                active_mask = active_mask * currently_active
+            
+            # Apply update only where active
+            z = z_prev * (1.0 - active_mask) + z_next * active_mask
+            
+            with torch.no_grad():
+                diffs.append(dist.mean().item())
 
         # 3. Output Projection from Fixed Point z*
         z = self.norm(z)
@@ -99,3 +110,42 @@ class TCRLLM(nn.Module):
         logits = self.lm_head(z)
 
         return logits
+
+    def forward_inference(self, x, epsilon: float = None):
+        """
+        Adaptive Depth Inference.
+        Runs recursion until convergence (or max_steps).
+        Returns logits and the number of steps taken.
+        """
+        if epsilon is None:
+            epsilon = getattr(self.config, 'tcr_epsilon', 1e-4)
+
+        # 1. Initialize z_0
+        z = self.token_embedding(x) * math.sqrt(self.config.d_model)
+        
+        alpha = self.config.tcr_alpha
+        steps_taken = 0
+        
+        for step in range(self.config.tcr_max_steps):
+            z_prev = z
+            steps_taken = step + 1
+            
+            # Apply Universal Operator T(z)
+            z_proposal = z
+            for block in self.universal_operator:
+                z_proposal = block(z_proposal)
+            
+            # Damped Update
+            z = alpha * z_prev + (1 - alpha) * z_proposal
+            
+            # Check Convergence
+            dist = torch.norm(z - z_prev, p=2, dim=-1).max().item() # Max diff across batch/seq
+            
+            if dist < epsilon:
+                break
+        
+        # 3. Output Projection
+        z = self.norm(z)
+        logits = self.lm_head(z)
+
+        return logits, steps_taken
