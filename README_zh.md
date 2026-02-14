@@ -11,7 +11,8 @@
 10. - 📄 **[研究论文 (PDF)](paper.pdf)** (英文)
 11. - 📝 **[论文源码 (LaTeX)](paper.tex)** (英文)
 12. - 📖 **[论文内容 (Markdown)](paper.md)** (英文)
-13. - 🇨🇳 **[中文版论文 (LaTeX)](paper_zh.tex)**
+- 🇨🇳 **[中文版论文 (PDF)](paper_zh.pdf)**
+- 📝 **[中文版论文源码 (LaTeX)](paper_zh.tex)**
 14. 
 15. ---
 16: 
