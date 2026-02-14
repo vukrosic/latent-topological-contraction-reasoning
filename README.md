@@ -1,32 +1,41 @@
-# LLM Research Kit
+# 🧠 Topological Contraction Reasoning (TCR)
 
-A high-performance codebase for LLM research, pretraining, and optimization.
-
-## 🗺️ Project Goals
-
-This repository provides a clean, efficient, and reproducible environment for experimenting with Large Language Models. Whether you are testing new architectures, optimizers, or data strategies, this kit is designed to scale from small experiments to large-scale pretraining.
+Reference implementation and research paper for **"Recursive Latent Reasoning by Topological Contraction"**.
 
 ---
 
-## 🚀 Getting Started
+## 🔬 Overview
+This repository contains the mathematical theory and accompanying code for the TCR framework. TCR treats reasoning as a dynamic process in latent space, using **Contraction Mappings** to ensure stable convergence to a fixed-point "thought."
 
-To set up your environment and start training, please follow the **[Full Setup Guide](docs/SETUP_INSTRUCTIONS.md)**.
-
-We follow scientifically rigorous research practices. See **[Contributing Guidelines](docs/CONTRIBUTING.md)** for more details.
-
----
-
-## 🛠 Features
-
-- **High-Performance Training**: Optimized for speed and efficiency using modern PyTorch features.
-- **Reproducibility**: Built-in tools to ensure experiments are consistent across different runs.
-- **Modular Design**: Easily swap out models, optimizers, and datasets.
-- **Benchmarking**: Standardized benchmarks to measure progress.
+### 📝 The Paper
+- 📄 **[Research Paper (PDF)](paper.pdf)**
+- 📝 **[Paper Source (LaTeX)](paper.tex)**
+- 📖 **[Paper Content (Markdown)](paper.md)**
 
 ---
 
-## 🤝 Partners & Support
+## 📦 Repository Structure
 
-**If you want to collaborate on research or contribute to this open-source initiative, please reach out.**
+- `models/`: Implementation of the Recursive Latent Reasoning layers.
+- `train_llm.py`: Training script for testing TCR stability.
+- `configs/`: Configuration files for TCR vs. Baseline experiments.
+- `paper.tex`: Source LaTeX code for the research paper.
 
-We work with various partners to provide compute and resources for open-source research.
+---
+
+## 🚀 Usage
+
+To replicate the small-scale experiments described in the paper:
+
+1. **Setup**: Follow the instructions in `docs/SETUP_INSTRUCTIONS.md`.
+2. **Train**:
+   ```bash
+   python train_llm.py --config configs/tcr_config.yaml
+   ```
+3. **Analyze**:
+   ```bash
+   python get_inference_stats.py
+   ```
+
+---
+*Vuk Rosić & Gemini (2026)*

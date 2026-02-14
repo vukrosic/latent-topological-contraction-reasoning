@@ -13,20 +13,20 @@ __pycache__/
 build/
 develop-eggs/
 dist/   
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+16: downloads/
+17: eggs/
+18: .eggs/
+19: lib/
+20: lib64/
+21: parts/
+22: sdist/
+23: var/
+24: wheels/
+25: share/python-wheels/
+26: *.egg-info/
+27: .installed.cfg
+28: *.egg
+29: MANIFEST
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -242,3 +242,14 @@ logs_debug/
 
 # GitHub App credentials
 gha-creds-*.json
+
+# LaTeX auxiliary files
+*.aux
+*.log
+*.out
+*.toc
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.bbl
+*.blg
