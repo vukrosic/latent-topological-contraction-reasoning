@@ -1,0 +1,269 @@
+
+\documentclass[11pt, a4paper]{article}
+\usepackage{xeCJK}
+\setCJKmainfont{Noto Serif CJK SC}
+\setCJKsansfont{Noto Sans CJK SC}
+\setCJKmonofont{Noto Sans Mono CJK SC}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning}
+\usepackage{float}
+\usepackage[numbers]{natbib}
+\bibliographystyle{plainnat}
+
+\geometry{left=2.5cm, right=2.5cm, top=2.5cm, bottom=2.5cm}
+
+% Increase spacing between sections
+\titlespacing*{\section}{0pt}{2em}{1em}
+\titlespacing*{\subsection}{0pt}{1.5em}{0.75em}
+\setlength{\parskip}{0.5em}
+
+\title{\textbf{基于拓扑收缩的递归潜在推理}}
+\author{Vuk Rosić\thanks{我们感谢 Novita AI 提供本研究所需的计算资源。}, Gemini \\ \small \raisebox{-0.2\height}{\includegraphics[height=1.2em]{github-mark.png}} \ \href{https://github.com/vukrosic/latent-topological-contraction-reasoning}{vukrosic/latent-topological-contraction-reasoning}}
+\date{2026年2月14日}
+
+\begin{document}
+
+\maketitle
+
+\renewcommand{\abstractname}{摘要}
+\begin{abstract}
+现代大型语言模型（LLM）通过固定的层序列处理信息，将其“思考时间”限制为一个常数值，而无论问题的复杂性如何。在本文中，我们提出了\textbf{拓扑收缩推理（TCR）}这一框架，将推理视为潜空间中的动态过程，而非静态的前馈传递。通过将推理步骤建模为\textbf{收缩映射}，我们提供了递归潜状态将收敛到唯一、稳定的“思想”——即不动点——的数学保证。我们利用巴拿赫不动点定理，对收敛性质进行了严格的逐步数学推导。
+
+\vspace{0.5cm}
+\noindent \textbf{研究注记：} 本项工作主要是一次\textbf{理论与架构上的探索}。我们提供了代码实现和一个小规模的\textbf{概念验证（PoC）}，以展示递归训练循环的稳定性。这些实验并非详尽无遗。相反，本文旨在为未来关于可变深度推理架构的研究奠定概念与技术基础。
+\end{abstract}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.85, >=Stealth]
+    % Define the fixed point
+    \coordinate (ZStar) at (0,0);
+    \fill[red] (ZStar) circle (2pt) node[right, align=left] {$z^*$ 不动点 \\ \footnotesize (稳定的“最佳”思想)};
+    
+    % Define the sequence of points
+    \coordinate (Z0) at (-4, 2);
+    \coordinate (Z1) at (-2, 1);
+    \coordinate (Z2) at (-1, 0.5);
+    \coordinate (Z3) at (-0.5, 0.25);
+    
+    % Draw points
+    \fill (Z0) circle (1.5pt) node[above] {$z_0$};
+    \fill (Z1) circle (1.5pt) node[above] {$z_1$};
+    \fill (Z2) circle (1.5pt) node[above] {$z_2$};
+    \fill (Z3) circle (1.5pt) node[above] {$z_3$};
+    
+    % Draw arrows showing the contraction mapping T
+    \draw[->, thick, blue] (Z0) to[bend left=20] node[midway, above, black] {$\mathcal{T}$} (Z1);
+    \draw[->, thick, blue] (Z1) to[bend left=20] (Z2);
+    \draw[->, thick, blue] (Z2) to[bend left=20] (Z3);
+    \draw[->, thick, blue, dashed] (Z3) -- (ZStar);
+    
+    % Draw some illustrative "basin of attraction" circles
+    \draw[gray, dashed] (0,0) circle (4.5);
+    \draw[gray, dashed] (0,0) circle (2.3);
+    \draw[gray, dashed] (0,0) circle (1.2);
+    
+\end{tikzpicture}
+\caption{可视化拓扑收缩推理（TCR）过程。从初始思想 $z_0$ 开始，递归算子 $\mathcal{T}$（例如，递归使用的单个 Transformer 层）迭代地优化表示。该序列收敛到唯一的不动点 $z^*$，它代表了最自洽或“正确”的思想。}
+\label{fig:tcr_convergence}
+\end{figure}
+
+\section{引言}
+标准 Transformer 架构 \cite{vaswani2017attention} 的根本局限性在于其架构的刚性。无论任务是简单的算术还是复杂的哲学推理，一个具有 $N$ 层的模型必须对输入应用 $N$ 次变换。相比之下，人类表现出可变的“思考时间”——在更难的问题上花费更多的认知努力，这一概念此前在自适应计算时间（ACT）\cite{graves2016adaptive} 等作品中进行过探索。
+
+为了弥合这一差距，我们从“层堆叠”范式转向\textbf{递归推理}范式，扩展了通用 Transformer \cite{dehghani2019universal} 和 ALBERT \cite{lan2020albert} 等权重共享架构的思想。我们假设“思考”是迭代优化潜在表示 $z$ 直至其变得“自洽”的行为。为了确保这一过程稳定且可预测，我们利用了\textbf{拓扑学}和\textbf{不动点理论}的力量。
+
+\section{TCR 假说}
+
+\subsection{潜在游乐场}
+我们将\textbf{潜空间} $\mathcal{Z}$ 定义为一个 $d$ 维向量空间（例如 $\mathbb{R}^d$）。该空间充当“概念景观”或“思维剧场”，其中每一个可能的思想或推理状态都通过唯一的点来表示。为了确保我们的推理过程在数学上是合理的，我们要求 $\mathcal{Z}$ 是一个\textbf{完备度量空间}。
+
+\begin{quote}
+\textbf{关于 LLM 架构的说明：} 这个潜空间在本质上与标准 Transformer 中的“隐藏状态”相同。它共享相同的维度和语义结构；区别仅在于我们如何遍历它——是递归地而不是线性地。
+\end{quote}
+
+\begin{itemize}
+    \item \textbf{度量 ($d$)：} 我们使用欧几里得距离 $d(u,v) = ||u-v||_2$ 来衡量两个思想之间的语义差异。如果 $d(u,v)$ 很小，则这两个状态代表几乎相同的逻辑结论。
+    \item \textbf{完备性：} 这是一个至关重要的拓扑要求。它保证了如果一系列思想持续“归向”某个特定目的地（即它是柯西序列），那么该目的地必须实际存在于我们的空间中。简单来说，在优化过程中思想不会消失在“逻辑空洞”或“漏洞”中。
+\end{itemize}
+
+\subsection{推理算子}
+我们不再将数据通过一堆固定的不同层，而是定义一个迭代应用的单一\textbf{推理算子} $\mathcal{T}: \mathcal{Z} \to \mathcal{Z}$。可以将 $\mathcal{T}$ 想象为一个“逻辑精炼厂”或“思维过滤器”。每次应用 $\mathcal{T}$ 时，模型都会根据其内部权重重新评估其当前的假设 $z_t$。
+
+递归序列定义为：
+\begin{equation}
+ z_{t+1} = \mathcal{T}(z_t) 
+\end{equation}
+
+在这种范式中，\textbf{深度等同于时间}。一个复杂的问题不一定需要更多的参数；它只是需要同一个算子的更多“循环”来得出一个稳定的结论。
+
+\subsection{收缩性质}
+TCR 的“秘诀”在于\textbf{收缩要求}。为了使推理稳定且收敛，$\mathcal{T}$ 必须是一个\textbf{压缩映射}。这意味着对潜空间中的任何两点应用推理步骤，必须总是使它们彼此更接近。
+
+形式上，存在一个常数 $k \in [0, 1)$，使得对于任何两个思想 $u, v$：
+\begin{equation}
+ ||\mathcal{T}(u) - \mathcal{T}(v)|| \le k \cdot ||u - v|| 
+\end{equation}
+
+\textbf{直觉：} 想象对一个问题有两种不同的起始观点（点 $u$ 和 $v$）。如果推理过程 $\mathcal{T}$ 是一个收缩，那么每一步“思考”都会迫使这些观点收敛到一个共同的逻辑基础。常数 $k$ 代表这种收敛的“效率”——$k$ 越小，模型越快达成共识。这一性质确保了模型不会“幻觉”进入无限循环或发散噪声，而是稳定在一个唯一的、稳定的“思想”上。
+
+\section{数学基础}
+
+收缩性质的重要性在于**巴拿赫不动点定理** \cite{banach1922operations}。下面，我们将推导存在性和唯一性的证明，作为 TCR 的逻辑骨架。
+
+\subsection{收敛性的逐步证明}
+
+\textbf{引理 1：逐步收缩。}
+首先，我们考察单个“思考步骤”。我们想知道模型实际上是在安定下来还是只是在空转。我们要比较两个连续跳跃之间的距离：
+\begin{equation}
+ ||z_{t+1} - z_t|| = ||\mathcal{T}(z_t) - \mathcal{T}(z_{t-1})|| 
+\end{equation}
+应用**收缩性质**，我们看到：
+\begin{equation}
+ ||z_{t+1} - z_t|| \le k \cdot ||z_t - z_{t-1}|| 
+\end{equation}
+如果我们将此逻辑重复 $t$ 次，我们得到：
+\begin{equation}
+ ||z_{t+1} - z_t|| \le k^t \cdot ||z_1 - z_0|| 
+\end{equation}
+\textit{直觉：} 因为 $k < 1$，新“思想”与旧“思想”之间的距离随着每次迭代呈指数级缩小。模型的更新变得越来越小，就像一个球滚向碗底时失去能量一样。
+
+\textbf{引理 2：柯西性质。}
+为什么引理 1 还不够？仅仅因为步骤变小并不意味着我们停止移动（想想调和级数：$1 + 1/2 + 1/3 \dots$ —— 步骤趋于零，但和趋于无穷）。为了确保模型确实停在一个点上，我们要证明该序列是**柯西序列**。
+
+这意味着在遥远未来的*任何*两个状态（$z_n$ 和 $z_m$，其中 $m > n$）必须任意接近。我们使用\textbf{三角不等式}通过对它们之间的每一个微小步骤求和来弥合 $n$ 和 $m$ 之间的差距：
+\begin{equation}
+ ||z_m - z_n|| \le ||z_m - z_{m-1}|| + ||z_{m-1} - z_{m-2}|| + \dots + ||z_{n+1} - z_n|| 
+\end{equation}
+
+代入我们在引理 1 中发现的指数衰减 ($k^i$)，我们得到一个**几何级数**：
+\begin{equation}
+ ||z_m - z_n|| \le (k^{m-1} + k^{m-2} + \dots + k^n) \cdot ||z_1 - z_0|| 
+\end{equation}
+
+我们可以通过无穷几何级数的和来界定这个有限和：
+\begin{equation}
+ ||z_m - z_n|| \le k^n(1 + k + k^2 + \dots) \cdot ||z_1 - z_0|| = \frac{k^n}{1-k} ||z_1 - z_0|| 
+\end{equation}
+
+\textit{直觉：} 项 $\frac{k^n}{1-k}$ 充当“遏制护盾”。随着 $n$ 的增加，这个护盾向零收缩。这证明了思想不仅仅是在潜空间中永远缓慢“漂移”；它们正被压缩成一个单一的、不可逃避的点。在一个完备空间中，这个“被困”的序列*必须*有一个极限——我们的目的地 $z^*$。
+
+\textbf{引理 3：不动点的存在性。}
+最后，我们证明它要去的地方是正确的答案。既然我们知道序列收敛到某个极限 $z^*$，我们可以将极限通过算子 $\mathcal{T}$ 传递：
+\begin{equation}
+ z^* = \lim_{t \to \infty} z_{t+1} = \lim_{t \to \infty} \mathcal{T}(z_t) = \mathcal{T}(\lim_{t \to \infty} z_t) = \mathcal{T}(z^*) 
+\end{equation}
+\textit{直觉：} 在这个极限处，模型达到了**逻辑平衡**的状态。它审视自己的思想 $z^*$ 并判定这已经是最佳的表示（$\mathcal{T}(z^*) = z^*$）。这是不动点：模型推理的唯一、稳定的“真理”。
+
+\section{架构实现：递归循环}
+
+在基于 TCR 的模型中，我们从“层堆叠”转向“递归循环”，这一进程类似于深度均衡模型（DEQ） \cite{bai2019deep} 提出的框架。实施涉及两个关键组件：\textbf{通用算子递归}和\textbf{阻尼更新}。
+
+\subsection{通用算子递归}
+TCR 不使用不同权重的线性链（$\theta_1, \theta_2, \dots$），而是使用由固定参数 $\theta^*$ 参数化的单一\textbf{通用算子} $\mathcal{T}$。这是模型整个逻辑核心的复用。
+\begin{equation}
+ z_{t+1}' = \mathcal{T}(z_t; \theta^*) 
+\end{equation}
+这将模型通过将相同的推理逻辑应用到每一个“思想深度”尺度上，变成了一种\textbf{类分形架构}。
+
+\subsection{阻尼迭代更新（稳定器）}
+在高维潜空间中，原始递归步骤 $z_{t+1} = \mathcal{T}(z_t)$ 有时可能过于激进，导致振荡或“超调”过不动点。为了解决这个问题，我们实施\textbf{阻尼更新}：
+\begin{equation}
+ z_{t+1} = \alpha z_t + (1 - \alpha) \mathcal{T}(z_t) 
+\end{equation}
+其中 $\alpha \in [0, 1)$ 是**阻尼因子**（通常设置在 0.5 左右）。
+
+\textbf{为何这至关重要：}
+\begin{itemize}
+    \item \textbf{强制收缩：} 在实践中，确保神经网络在任何地方都是严格的收缩在数学上是困难的。阻尼更新有效地“减慢”了移动，使模型更容易滑入吸引盆并停留在那里。
+    \item \textbf{记忆动量：} $\alpha$ 充当先前状态的“记忆”。它确保向下一个状态的过渡是平滑的微调，而不是剧烈的跳跃。
+    \item \textbf{ODE 视角：} 这是连续时间系统 $\dot{z} = \mathcal{T}(z) - z$ 的**欧拉离散化**。在该视角下，不动点不仅仅是一个目的地，而是系统自然趋向的一个稳定**平衡点**。
+\end{itemize}
+
+\subsection{为何模型不会“模糊”或“遗忘”}
+对递归模型的一个普遍担忧是多次传递会将表示“模糊”成通用噪声，或者模型会“遗忘”原始输入。TCR 通过两种机制解决了这个问题：
+
+\begin{enumerate}
+    \item \textbf{不动点锁定（抗模糊）：} 
+    在标准 LLM 中，第 50 层与第 1 层相距甚远；熵可能会累积。在 TCR 中，模型不是在游荡；它正在**锁定唯一不动点** $z^*$。因为 $\mathcal{T}$ 是一个收缩，它充当**噪声过滤器**。如果表示开始“模糊”或偏离，算子 $\mathcal{T}$ 会自然地将其拉回稳定的、数学上唯一的吸引子。结果是逻辑的*锐化*而不是特征的模糊。
+
+    \item \textbf{吸引盆（抗遗忘）：} 
+    初始输入 $z_0$（token 嵌入）决定了潜在景观中的起始点。不动点 $z^*$ 是通过从 $z_0$ 开始顺着逻辑梯度到达的。由于映射是向着*该上下文的*唯一点的收缩，最终的“思想”正是输入内容的最数学精炼版本。输入没有被遗忘；它被**转化为了其最稳定的逻辑形式**。
+\end{enumerate}
+
+\subsection{自适应深度（思考时间）}
+由于 TCR 确保收敛，当**收敛残差** $\Delta_t = ||z_{t+1} - z_t||$ 低于阈值 $\epsilon$ 时，我们可以提前停止循环。
+\begin{itemize}
+    \item \textbf{简单问题：} 3 步达到 $\epsilon$。
+    \item \textbf{困难问题：} 可能需要 50 步才能安定。
+\end{itemize}
+模型花费的“思考时间”恰好与逻辑所需的一样多。
+
+\section{初步实验与发现}
+
+为了验证 TCR 假说，我们将标准基线模型与我们的递归架构进行了比较。鉴于本文的理论重点，我们旨在进行概念验证，而不是详尽的扩展研究。
+
+\subsection{训练条件}
+所有实验均在单块 **NVIDIA GeForce RTX 4090 GPU** 上进行。每个模型的总设置和训练循环在大约 **5 分钟** 内完成（其中 TCR 模型的主动权重更新约 105 秒）。
+
+\begin{itemize}
+    \item \textbf{数据量：} 800 万 token 的高质量预训练数据。
+    \item \textbf{规模：} 这是有意为之的\textbf{微观级}实验，旨在测试架构稳定性和梯度流，而非最终收敛或生产级性能。
+\end{itemize}
+
+\subsection{对比架构}
+我们比较了两种大小迥异的模型，看看递归是否可以弥补参数数量的不足：
+
+\begin{enumerate}
+    \item \textbf{基线 (LLM)：} 22 层，8860 万参数。
+    \item \textbf{TCR 模型 (TCRLLM)：} 2 层通用算子（复用 10 次），**3090 万参数**。
+\end{enumerate}
+
+\subsection{性能指标}
+尽管我们的 TCR 模型的参数减少了 **65.1\%**，但在这么短的训练窗口内，其性能非常接近更大的基线：
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+\textbf{指标} & \textbf{基线 (88.6M)} & \textbf{TCR (30.9M)} & \textbf{差异} \\
+\midrule
+\textbf{最终验证损失} & 4.9429 & \textbf{5.0364} & +1.8\% \\
+\textbf{最终验证准确率} & 23.83\% & \textbf{23.14\%} & -2.9\% \\
+\textbf{主动训练时间} & 120.9s & \textbf{103.1s} & -14.7\% \\
+\bottomrule
+\end{tabular}
+\caption{基线与 TCR 模型性能对比}
+\label{tab:performance}
+\end{table}
+
+\subsection{分析：为何这些结果很重要}
+\begin{itemize}
+    \item \textbf{有效的权重复用}：TCR 模型仅使用了 \textbf{34.9\% 的权重}，却达到了 \textbf{基线 97\% 的准确率}。这表明通用算子中的权重通过递归比在标准线性堆叠中利用得更有效率。
+    \item \textbf{高速下的稳定性}：即使在高速训练运行中，阻尼更新确保了 TCR 模型没有发散。这证明了在高维潜空间中拓扑收缩实现的稳健性。
+    \item \textbf{欠训练与 Epsilon 差距}：在测试中，模型目前对大多数 token 使用最大步数 (T=20)。这对于\textbf{欠训练}模型来说是预期行为。收缩“捷径”（提前停止）是我们预期在数十亿 token 后看到的涌现属性，随着模型的逻辑安定在更强的吸引盆中，可能需要额外的模块或辅助损失。
+\end{itemize}
+
+\subsection{研究范围与代码基础}
+本项工作主要是对\textbf{架构构思、数学推导和开源研究基础设施}的贡献。我们提供了一个功能齐全的代码设置，专为实验递归动力学而设计。
+
+该代码库作为一个开箱即用的游乐场，供能够访问更大集群（如 H100 节点）的研究人员测试不动点推理的扩展定律。
+
+\section{结论}
+我们提出了拓扑收缩推理（TCR），这是一种利用巴拿赫不动点定理以确保递归 LLM 中推理稳定收敛的框架。我们初步的小规模实验表明，TCR 模型可以与更大的基线竞争，通过高效的权重复用保持极小的参数足迹。
+
+本文提供了进一步探索这些动力学所需的\textbf{数学证明和软件基础设施}。虽然这里提供的概念验证受到计算和投入时间的限制，但它验证了 TCR 假说的核心机制，为未来开发深度是时间与逻辑复杂性函数而非固定参数计数的模型提供了一个稳定的平台。
+
+\bibliography{references}
+
+\end{document}

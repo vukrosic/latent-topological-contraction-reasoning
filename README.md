@@ -1,5 +1,7 @@
 # 🧠 Topological Contraction Reasoning (TCR)
 
+[🇨🇳 中文版](README_zh.md)
+
 Reference implementation and research paper for **"Recursive Latent Reasoning by Topological Contraction"**.
 
 ---
@@ -11,6 +13,8 @@ This repository contains the mathematical theory and accompanying code for the T
 - 📄 **[Research Paper (PDF)](paper.pdf)**
 - 📝 **[Paper Source (LaTeX)](paper.tex)**
 - 📖 **[Paper Content (Markdown)](paper.md)**
+- 🇨🇳 **[Chinese Paper (PDF)](paper_zh.pdf)**
+- 📝 **[Chinese Paper Source (LaTeX)](paper_zh.tex)**
 
 ---
 
